@@ -25,7 +25,39 @@ def stitch_background(imgs: Dict[str, torch.Tensor]):
     img = torch.zeros((3, 256, 256)) # assumed 256*256 resolution. Update this as per your logic.
 
     #TODO: Add your code here. Do not modify the return and input arguments.
+    img1 = imgs["t1_1.png"].float()
+    img2 = imgs["t1_1.png"].float()
+
+    img1 = img1.unsqueeze(0)
+    img2 = img2.unsqueeze(0)
+
+    img1 = K.color.rgb_to_grayscale(img1)
+    img2 = K.color.rgb_to_grayscale(img2)
+
+    img1Map = K.feature.harris_response(img1, k=0.04, grads_mode='sobel', sigmas=None)
+    img2Map = K.feature.harris_response(img2, k=0.04, grads_mode='sobel', sigmas=None)
+
+    maxMap1 = torch.max_pool2d(img1Map,3,1,1)
+    maxMap2 = torch.max_pool2d(img2Map,3,1,1)
+
+    mask1 = img1Map == maxMap1
+    mask2 = img2Map == maxMap2
+
+    nmsImg1 = img1Map * mask1
+    nmsImg2 = img2Map * mask2
+
+    threshold1 = 0.05 * nmsImg1.max()
+    threshold2 = 0.05 * nmsImg2.max()
+
+
+    nmsImg1[nmsImg1 < threshold1] = 0
+    nmsImg2[nmsImg2 < threshold2] = 0
+
+    nmsImg1 = nmsImg1.squeze()
+    nmsImg2 = nmsImg2.squeze()
+
     
+
     return img
 
 # ------------------------------------ Task 2 ------------------------------------ #
