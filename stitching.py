@@ -24,8 +24,10 @@ def stitch_background(imgs: Dict[str, torch.Tensor]):
     """
 
     #TODO: Add your code here. Do not modify the return and input arguments.
-    img1 = imgs["t1_1.png"].float()
-    img2 = imgs["t1_2.png"].float()
+    imgNames = list(imgs.keys())
+
+    img1 = imgs[imgNames[0]].float()
+    img2 = imgs[imgNames[1]].float()
 
     img1 = img1.unsqueeze(0)
     img2 = img2.unsqueeze(0)
@@ -166,11 +168,11 @@ def stitch_background(imgs: Dict[str, torch.Tensor]):
     imgW = int(torch.ceil(maxx - minx).item())
     imgH = int(torch.ceil(maxy - miny).item())
 
-    warpedImg1 = K.geometry.transform.warp_perspective(imgs["t1_1.png"].float().unsqueeze(0), (translationMatrix @ bestHomography[0]).unsqueeze(0), (imgH,imgW),mode='bilinear',padding_mode="zeros")
+    warpedImg1 = K.geometry.transform.warp_perspective(imgs[imgNames[0]].float().unsqueeze(0), (translationMatrix @ bestHomography[0]).unsqueeze(0), (imgH,imgW),mode='bilinear',padding_mode="zeros")
     
     retImg = torch.zeros((3, imgH,imgW))
     retImg = warpedImg1.squeeze().clone()
-    retImg[:,int(-miny):int(-miny)+height2,int(-minx):int(-minx)+width2] = imgs["t1_2.png"].float()
+    retImg[:,int(-miny):int(-miny)+height2,int(-minx):int(-minx)+width2] = imgs[imgNames[1]].float()
 
     img1Mask = warpedImg1.squeeze(0).sum(dim=0) > 0
     img2Mask = torch.zeros((imgH,imgW),dtype=torch.bool)
@@ -178,7 +180,7 @@ def stitch_background(imgs: Dict[str, torch.Tensor]):
 
     overlapMask = img1Mask & img2Mask
     overlapArea = torch.zeros_like(warpedImg1.squeeze(0))
-    overlapArea[:,int(-miny):int(-miny)+height2,int(-minx):int(-minx)+width2] = imgs["t1_2.png"].float()
+    overlapArea[:,int(-miny):int(-miny)+height2,int(-minx):int(-minx)+width2] = imgs[imgNames[1]].float()
     diff = torch.abs(warpedImg1.squeeze(0) - overlapArea).mean(dim=0)
 
     foregroundMask = overlapMask & (diff >= 0) #change this value and see what happens (pixel difference threshold)
@@ -201,84 +203,10 @@ def panorama(imgs: Dict[str, torch.Tensor]):
     img = torch.zeros((3, 256, 256)) # assumed 256*256 resolution. Update this as per your logic.
     overlap = torch.empty((3, 256, 256)) # assumed empty 256*256 overlap. Update this as per your logic.
 
-
-    img1 = imgs["t2_1.png"].float()
-    img2 = imgs["t2_2.png"].float()
-    img3 = imgs["t2_3.png"].float()
-    img4 = imgs["t2_4.png"].float()
-
-    img1 = img1.unsqueeze(0)
-    img2 = img2.unsqueeze(0)
-    img3 = img3.unsqueeze(0)
-    img4 = img4.unsqueeze(0)
-
-    img1 = K.color.rgb_to_grayscale(img1)
-    img2 = K.color.rgb_to_grayscale(img2)
-    img3 = K.color.rgb_to_grayscale(img3)
-    img4 = K.color.rgb_to_grayscale(img4)
-
-    _, _, height1, width1 = img1.shape
-    _, _, height2, width2 = img2.shape
-    _, _, height3, width3 = img3.shape
-    _, _, height4, width4 = img4.shape
     
-    img1HarrisMap = K.feature.harris_response(img1, k=0.04, grads_mode='sobel', sigmas=None)
-    img2HarrisMap = K.feature.harris_response(img2, k=0.04, grads_mode='sobel', sigmas=None)
-    img3HarrisMap = K.feature.harris_response(img3, k=0.04, grads_mode='sobel', sigmas=None)
-    img4HarrisMap = K.feature.harris_response(img4, k=0.04, grads_mode='sobel', sigmas=None)
 
-    img1 = img1.squeeze()
-    img2 = img2.squeeze()
-    img3 = img2.squeeze()
-    img4 = img2.squeeze()
     
-    maxMap1 = torch.max_pool2d(img1HarrisMap,3,1,1)
-    maxMap2 = torch.max_pool2d(img2HarrisMap,3,1,1)
-
-    nmsMask1 = img1HarrisMap == maxMap1
-    nmsMask2 = img2HarrisMap == maxMap2
-
-    nmsImg1 = img1HarrisMap * nmsMask1
-    nmsImg2 = img2HarrisMap * nmsMask2
-
-    threshold1 = 0.05 * nmsImg1.max()
-    threshold2 = 0.05 * nmsImg2.max()
-
-
-    nmsImg1[nmsImg1 < threshold1] = 0
-    nmsImg2[nmsImg2 < threshold2] = 0
-
-    nmsImg1 = nmsImg1.squeeze()
-    nmsImg2 = nmsImg2.squeeze()
-
-    kpy1, kpx1 = torch.where(nmsImg1 > 0) 
-    kpy2, kpx2 = torch.where(nmsImg2 > 0) 
-
-    keypoints1 = torch.stack([kpx1,kpy1],dim=1)
-    keypoints2 = torch.stack([kpx2,kpy2],dim=1)
-
-    kpAndDescriptor1 = []
-
-    for kp in keypoints1:
-        x = kp[0]
-        y = kp[1]
-        if y >= 4 and y < height1 - 4 and x >= 4 and x < width1 - 4:
-            d = img1[y-4:y+5,x-4:x+5]
-            d = d - d.mean()   #normalizing
-            d = d / d.std()     #normalizing
-            kpAndDescriptor1.append((x,y,d.reshape(-1)))
-
-    kpAndDescriptor2 = []
-
-    for kp in keypoints2:
-        x = kp[0]
-        y = kp[1]
-        if y >= 4 and y < height2 - 4 and x >= 4 and x < width2 - 4:
-            d = img2[y-4:y+5,x-4:x+5]
-            d = d - d.mean()   #normalizing
-            d = d / d.std()     #normalizing
-            kpAndDescriptor2.append((x,y,d.reshape(-1)))
-
+                
 
     #TODO: Add your code here. Do not modify the return and input arguments.
 
